@@ -5,6 +5,9 @@ from scipy.optimize import linprog  # for support, projection, and more
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
+import math
+import time
+
 
 class Polytope:
 
@@ -240,7 +243,7 @@ class Polytope:
     return type(self).__name__ + f' in R^{self.n}'
 
   def __bool__(self):  # return True if the polytope is not empty
-    return self.in_V_rep or self.in_H_rep
+    return not self.is_empty()
 
   def __and__(self, other):  # return the intersection of self and other
     if isinstance(other, Polytope):
@@ -519,7 +522,30 @@ class Polytope:
       return np.all(x_contained, axis=0)
 
 
+  def is_empty(self):
+    # First check if A, b, and V are all empty
+    if self.A.shape[0] == 0 and self.b.shape[0] == 0 and self.V.shape[0] == 0:
+      return True
 
+    # If V representation is non-empty then polyhedron is trivially nonempty
+    if len(self.V.shape[1]) == self.n:
+      return False
+
+    # If H-representation that has not been reduced, it is possible to create
+    # empty polyhedra, e.g. from intersections of disjoint sets.
+    # Can find out if it is empty through simple LP.
+    res = linprog(np.zeros(size.n), self.A, self.b)
+
+    if res.status == 0:
+      return False
+    else:
+      # TODO: Catch edge-cases for which optimization solver doesn't "terminate
+      # successfully" but problem is not actually infeasible. Since the 
+      # objective function is a constant, this should avoid unboundedness
+      # res.status == 3.
+      return True
+
+    
 
   def plot(self, ax=None, **kwargs):
     # Plot Polytope. Add separate patches for the fill and the edge, so that
@@ -598,7 +624,7 @@ def P_plus_p(P, point, subtract_p=False):
   return P_shifted
 
 
-def minkowski_sum(P, Q):
+def minkowski_sum(P, Q, reduce=True):
   # Minkowski sum of two convex polytopes P and Q:
   # P + Q = {p + q in R^n : p in P, q in Q}.
   # In vertex representation, this is the convex hull of the pairwise sum of all
@@ -613,11 +639,14 @@ def minkowski_sum(P, Q):
   for i_q, q in enumerate(Q.V):  # TODO: loop over the smallest vertex set?
     msum_V[i_q * P.nV: (i_q + 1) * P.nV, :] = P.V + q
   P_plus_Q = Polytope(msum_V)  # TODO: make this more compact with chaining?
-  P_plus_Q.minimize_V_rep()
+
+  if reduce:
+    P_plus_Q.minimize_V_rep()
+    
   return P_plus_Q
 
 
-def pontryagin_difference(P, Q):
+def pontryagin_difference(P, Q, reduce=True):
   # Pontryagin difference for two convex polytopes P and Q:
   # P - Q = {x in R^n : x + q in P, for all q in Q}
   # In halfspace representation, this is [P.A, P.b - Q.support(P.A)], with
@@ -630,9 +659,14 @@ def pontryagin_difference(P, Q):
   # For each inequality i in P: subtract the support of Q in the direction P.A_i
   for ineq in range(m):
     pdiff_b[ineq] = P.b[ineq] - Q.support(P.A[ineq])[0]  # TODO: error check [1]
-  # Determine which inequalities are redundant, if any:
-  redundant = redundant_inequalities(P.A, pdiff_b)
-  pdiff = Polytope(P.A[~redundant], pdiff_b[~redundant])  # minimal H-rep
+  
+  if reduce:
+    # Determine which inequalities are redundant, if any:
+    redundant = redundant_inequalities(P.A, pdiff_b)
+    pdiff = Polytope(P.A[~redundant], pdiff_b[~redundant])  # minimal H-rep
+  else:
+    pdiff = Polytope(P.A, pdiff_b)
+
   return pdiff
 
 
@@ -659,16 +693,21 @@ def linear_map(M, P):
   return Polytope(P.V @ M.T)
 
 
-def intersection(P, Q):
+def intersection(P, Q, reduce=True):
   # Set intersection of the polytopes P and Q. P_i_Q: P intersection Q
   # TODO: improve handling of empty intersections
   # Combine the H-representation of both polytopes:
   P_i_Q_A = np.vstack((P.A, Q.A))
   P_i_Q_b = np.vstack((P.b, Q.b))
-  # Determine which inequalities are redundant, if any:
-  redundant = redundant_inequalities(P_i_Q_A, P_i_Q_b)
-  # Create the intersection P_i_Q from the inequalities that are not redundant:
-  P_i_Q = Polytope(P_i_Q_A[~redundant], P_i_Q_b[~redundant])
+
+  if reduce:
+    # Determine which inequalities are redundant, if any:
+    redundant = redundant_inequalities(P_i_Q_A, P_i_Q_b)
+    # Create the intersection P_i_Q from the inequalities that are not redundant:
+    P_i_Q = Polytope(P_i_Q_A[~redundant], P_i_Q_b[~redundant])
+  else:
+    P_i_Q = Polytope(P_i_Q_A, P_i_Q_b)
+
   return P_i_Q
 
 
@@ -708,3 +747,62 @@ def solve_lp(c, solver='linprog', *args, **kwargs):
   else:
     raise NotImplementedError(f'Support for solver {solver} not implemented')
   return result
+
+def poly_slice(P, dims, values, keep_dims=False):
+  ''' Polytope slicing
+
+  Based off the implementation in Multi-Parametric Toolbox (MPT3)
+  '''
+  if P.is_empty():
+    return Polytope(n=P.dim)
+  
+  if any(dims >= P.dim):
+    raise ValueError('Value in dimension array exceeds total Polytope '
+      'dimension')
+
+  dims = np.array(dims, dtype=float)
+  values = np.array(values, dtype=float)
+
+  if dims.shape[0] != values.shape[0]:
+    raise ValueError('Dimension array and value array must be 1-d vectors '
+      'of equivalent length')
+
+  if len(dims.shape) > 1 or len(values.shape) > 1:
+    raise ValueError('Dimension array and value array must be 1-d vectors')
+
+  # Need H-representation in order to perform the slice
+  # The getter for A will determin the H-representation if it does not already
+  # exist.
+  if keep_dims:
+    # Return a polytope of the same "dimension" of the original.
+    # In this context, dimension is different than span as defined in the
+    # original clas
+    Z = np.zeros((dims.shape[0], P.dim), dtype=float)
+    for i in range(Z.shape[0]):
+      Z[i][dims[i]] = 1.0
+
+    return Polytope(np.vstack((P.A, P.Z, -P.Z)), 
+      np.concatenate(P.b, values, -values))
+
+  else:
+    Z = np.empty((0, P.dim-dims.shape[0]))
+    c = np.empty(P.dim-dims.shape[0])
+
+    # Array with zeros except for the values specified in dims
+    x = np.zeros(P.dim)
+    for i in range(dims):
+      x[dims[i]] = values[i]
+
+    AT = np.transpose(P.A)
+    for i in range(P.dim):
+      c = np.concatenate((c, P.b[i] - P.A[i] @ x))
+      
+      if not i in dims:
+        # Because of slicing issues, it's easier to stack the transposed matrix
+        # and then re-transpose at the end
+        Z = np.vstack((Z, AT[i]))
+
+    # Transpose the matrix back
+    Z = np.transpose(Z)
+
+    return Polytope(Z, c)
