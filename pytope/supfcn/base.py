@@ -96,7 +96,13 @@ class SupportFcn():
                             'a scalar or a matrix')
                     
                 else:
-                    return SupportFcn(self.n, callback=lambda l: self(A.T @ l))
+                    if self.n != A.shape[1]:
+                        raise ValueError('Dimension mismatch between matrix '
+                            'multiplier and dimension of the support function '
+                            'space')
+
+                    return SupportFcn(A.shape[0], 
+                        callback=lambda l: self(A.T @ l))
         else:
             return NotImplemented
 
@@ -139,7 +145,7 @@ class SupportFcn():
             else:
                 n = poly.V.shape[0]
 
-            return SupportFcn(n, callback=lambda l: np.max(poly.V.T @ l))
+            return SupportFcn(n, callback=lambda l: np.max(poly.V @ l))
         else:
             if len(poly.A.shape) > 1:
                 n = poly.A.shape[1]

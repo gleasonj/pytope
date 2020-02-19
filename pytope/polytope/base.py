@@ -187,8 +187,16 @@ class Polytope:
     return self._V
 
   def _set_V(self, V):
-    self._V = np.asarray(V, dtype=float)
-    nV, n = self._V.shape
+    # Support for singleton vertex definitions
+    V = np.atleast_2d(np.asarray(V, dtype=float))
+
+    if len(V.shape) > 2:
+      raise ValueError('Vertices must be specified by a vector or a matrix '
+        '(array of vectors)')
+
+    nV, n = V.shape
+
+    self._V = V
     self.n = n
     if nV:  # in_V_rep if V is not an empty array
       self.in_V_rep = True
