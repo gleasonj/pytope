@@ -784,7 +784,7 @@ def poly_slice(P, dims, values, keep_dims=False):
   if keep_dims:
     # Return a polytope of the same "dimension" of the original.
     # In this context, dimension is different than span as defined in the
-    # original clas
+    # original class
     Z = np.zeros((dims.shape[0], P.dim), dtype=float)
     for i in range(Z.shape[0]):
       Z[i][dims[i]] = 1.0
@@ -814,3 +814,196 @@ def poly_slice(P, dims, values, keep_dims=False):
     Z = np.transpose(Z)
 
     return Polytope(Z, c)
+
+class NdBox(Polytope):
+  ''' NdBox
+
+  An NdBox (n-dimensional hypercube) is a specialized type of polytope that
+  is defined by a lower-bound and and upper-bound. These are commonly used
+  sets to define basic rectangular bounds in spaces. Because of their
+  definitions, some set operations can be performed exactly and quickly.
+
+  '''
+  def __init__(self, lb, ub):
+    ''' NdBox Constructor
+
+    Args:
+      lb - Lower bound, array-like object
+      ub - Upper bound, array-like object
+
+    '''
+    lb = np.asarray(lb, dtype=float)
+    ub = np.asarray(ub, dtype=float)
+
+    if len(lb.shape) > 1 or len(ub.shape) > 1:
+      raise ValueError('Lower and upper bounds must be arrays')
+
+    self._lb
+    self._ub
+
+    super().__init__(lb=lb, ub=ub)
+
+  @property
+  def lb(self):
+    ''' Lower bound of NdBox '''
+    return self._lb
+
+  def ub(self):
+    ''' Upper bound of NdBox '''
+    return self._ub
+
+  def __and__(self, B):
+    ''' Intersection '''
+    if isinstance(B, NdBox):
+      lb = np.max((self.lb, B.lb))
+      ub = np.min((self.ub, B.ub))
+
+      return NdBox(lb, ub)
+    else:
+      return super().__and__(B)
+
+  def __radd__(self, B):
+    return self.__add__(B)
+
+  def __add__(self, B):
+    if isinstance(B, (list, tuple)):
+      B = np.asarray(B, dtype=float)
+
+    if isinstance(B, np.ndarray):
+      if len(B.shape) == 1:
+        return NdBox(self.lb+B, self.ub+B)
+      else:
+        raise ValueError('Cannot add NdBox and np.ndarray of shape {}'.format(
+          B.shape))
+    elif isinstance(B, NdBox):
+      return NdBox(self.lb+B.lb, self.ub+B.ub)
+    else:
+      return super().__add__(B)
+
+  def __minus__(self, B):
+    ''' Pontryagin difference '''
+    if isinstance(B, (list, tuple)):
+      B = np.asarray(B, dtype=float)
+
+    if isinstance(B, np.ndarray):
+      return self.__add__(-B)
+    elif isinstance(B, NdBox):
+      xcs = (self.ub + self.lb) / 2
+      xcB = (B.ub + B.lb) / 2
+
+      lb = self.lb + (B.ub - B.lb) + (xcs - xcB)
+      ub = self.ub + (B.lb - B.ub) + (xcs - xcB)
+
+      if np.any(ub < lb):
+        return Polytope(n=self.n)
+      else:
+        return NdBox(lb, ub)
+
+    else:
+      return super().__minus__(B)
+
+  def __mul__(self, M):
+    return NotImplemented
+  
+  def __rmul__(self, M):
+    return self.matmul(M)
+
+  def matmul(self, M, ndbox_approx=None):
+    ''' Matrix multiply
+
+    This function implements M * B, where M is a matrix and B is an NdBox. 
+    Typically this multiplication will result in the set no longer being an
+    NdBox, but the results approximation can be over and underapproximated with
+    an NdBox very quickly. This is useful for high-dimensional polytope 
+    computations where vertex-facet enumeration becomes limiting.
+
+    Args:
+      M - Multiplying Matrix
+
+    Kwargs:
+      ndbox_approx: None - The type of approximation method to perform; can be
+          either None, 'Over', or 'Under'
+
+    '''
+    if isinstance(M, (int, float)):
+      if M < 0:
+        return NdBox(M * self.ub, M * self.lb)
+      else:
+        return NdBox(M * self.lb, M * self.ub)
+
+    elif isinstance(M, np.ndarray):
+      if len(M.shape) != 2:
+        raise ValueError('Cannot perform multiplication M * B for M with '
+          'len(M.shape) !=2')
+
+      if ndbox_approx == None:
+        return super().multiply(M)
+      else:
+        if not isinstance(ndbox_approx, str):
+          raise TypeError('Invalid type for ndbox_approx. Received `{}` but '
+            'expecting String or None'.format(type(ndbox_approx)))
+
+        if ndbox_approx.lower() == 'over':
+          # create a box over-approximation
+          ub = [self.support(e) for e in M @ np.eye(self.n).T]
+          lb = [-self.support(e) for e in -M @ np.eye(self.n).T]
+
+          return NdBox(lb, ub)
+        elif ndbox_approx.lower() = 'under':
+          raise NotImplementedError('Working on it...')
+        else:
+          raise ValueError('Invalid option for ndbox_approx. Received `{}` '
+            'but expected None, `Over`, or `Under`'.format(ndbox_approx))
+
+    else:
+      return NotImplemented
+
+  def support(self, l):
+    ''' Support function value of NdBox
+
+    Args:
+      l - Direction vector
+
+    '''
+    l = np.asarray(l, dtype=float)
+
+    if len(l.shape) > 1:
+      raise ValueError('Support direction must be an array')
+
+    if l.shape[0] != self.n:
+      raise ValueError('Support direction not of the same dimension as the '
+        'NdBox: {} != {}'.format(l.shape[0], self.n))
+
+    v = np.empty(self.n):
+    for i in range(self.n):
+      v[i] = self.ub[i] if l[i] >=0 else self.lb[i]
+
+    return l @ v
+
+  def contains(self, x):
+    ''' Check if point/set is contained in Ndbox
+
+    Args:
+      x - Array or set
+
+    '''
+    if isinstance(x, (list, tuple))
+      x = np.asarray(x, dtype=float)
+
+    if isinstance(x, np.ndarray):
+      if len(x.shape) > 1:
+        if len(x.shape) > 2:
+          raise ValueError('Cannot check containment for np.ndarray of '
+            'shape {}'.format(x.shape))
+        
+        return np.all(x <= self.ub, axis=1) * np.all(x >= self.lb, axis=1)
+
+      else:
+        return np.all(x <= self.ub) * np.all(x >= self.lb)
+
+    else:
+      return super().contains(x)
+
+  def sample(self):
+    ''' Uniform sample inside box '''
+    return np.random.uniform(self.lb, self.ub)
