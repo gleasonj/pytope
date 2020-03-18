@@ -536,7 +536,7 @@ class Polytope:
       return True
 
     # If V representation is non-empty then polyhedron is trivially nonempty
-    if len(self.V.shape[1]) == self.n:
+    if self.V.shape[1] == self.n:
       return False
 
     # If H-representation that has not been reduced, it is possible to create
@@ -838,8 +838,8 @@ class NdBox(Polytope):
     if len(lb.shape) > 1 or len(ub.shape) > 1:
       raise ValueError('Lower and upper bounds must be arrays')
 
-    self._lb
-    self._ub
+    self._lb = lb
+    self._ub = ub
 
     super().__init__(lb=lb, ub=ub)
 
@@ -848,6 +848,7 @@ class NdBox(Polytope):
     ''' Lower bound of NdBox '''
     return self._lb
 
+  @property
   def ub(self):
     ''' Upper bound of NdBox '''
     return self._ub
@@ -949,7 +950,7 @@ class NdBox(Polytope):
           lb = [-self.support(e) for e in -M @ np.eye(self.n).T]
 
           return NdBox(lb, ub)
-        elif ndbox_approx.lower() = 'under':
+        elif ndbox_approx.lower() == 'under':
           raise NotImplementedError('Working on it...')
         else:
           raise ValueError('Invalid option for ndbox_approx. Received `{}` '
@@ -974,7 +975,7 @@ class NdBox(Polytope):
       raise ValueError('Support direction not of the same dimension as the '
         'NdBox: {} != {}'.format(l.shape[0], self.n))
 
-    v = np.empty(self.n):
+    v = np.empty(self.n)
     for i in range(self.n):
       v[i] = self.ub[i] if l[i] >=0 else self.lb[i]
 
@@ -987,7 +988,7 @@ class NdBox(Polytope):
       x - Array or set
 
     '''
-    if isinstance(x, (list, tuple))
+    if isinstance(x, (list, tuple)):
       x = np.asarray(x, dtype=float)
 
     if isinstance(x, np.ndarray):
