@@ -12,7 +12,7 @@ setup(name='pytope',
       author='Tor Aksel N. Heirung',
       author_email='github@torheirung.com',
       license='MIT',
-      packages=['pytope'],
+      packages=setuptools.find_packages(),
       install_requires=[
         'numpy',
         'scipy>=1.3.0',  # 1.3.0 for the reflective-simplex option in linprog()
