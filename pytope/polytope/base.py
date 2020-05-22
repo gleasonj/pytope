@@ -219,6 +219,39 @@ class Polytope:
   def is_full_dimensional(self):
     return self.dim == self.n
 
+  def bbox(self):
+    ''' Get the bounding box (minimum and maximum values) for the polytope '''
+    if self.in_V_rep:
+        bbox_min = np.min(self.V, axis=0)
+        bbox_max = np.max(self.V, axis=0)
+    else:
+        # Need to use linear programming to determine the minima and maxima
+        bbox_min = np.empty(self.n)
+        bbox_max = np.empty(self.n)
+
+        A = np.eye(self.n)
+
+        for i, a in enumerate(A):
+          # Maximum value for bounding box along axis
+          res = linprog(-a, self.A, self.b.T, bounds=(-np.inf, np.inf))
+
+          if res.success:
+            bbox_max[i] = -res.fun
+          else:
+            raise RuntimeError('Could not determine bounding box. Optimization '
+              'failed with the following message: \'{}\''.format(res.message))
+
+          # Minimum value for bounding box along axis
+          res = linprog(a, self.A, self.b, bounds=(-np.inf, np.inf))
+
+          if res.success:
+            bbox_min[i] = res.fun
+          else:
+            raise RuntimeError('Could not determine bounding box. Optimization '
+              'failed with the following message: \'{}\''.format(res.message))
+
+    return (bbox_min, bbox_max)
+
   def V_sorted(self):
     # Sort vertices (increasing angle: the point (x1, x2) = (1, 0) has angle 0).
     # np.arctan2(y, x) returns angles in the range [-pi, pi], so vertices are
