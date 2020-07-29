@@ -19,7 +19,7 @@ class Polytope:
     # Check if the constructor was called to create an empty Polytope in R^n --
     # Polytope(n=n). This is only allowed if n is the only argument.
     if 'n' in kwargs and (args or len(kwargs) > 1):
-      raise ValueError('Cannot set dimension n with other arguments')
+      raise ValueError('Cannot set dimension n with other arguments') 
 
     # Set some defaults, potentially changed below:
     self.n = n
