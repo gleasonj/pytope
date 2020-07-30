@@ -131,7 +131,7 @@ class SupportFcn():
 
         n = xc.shape[0]
 
-        return SupportFcn(n, lambda l: rad * (l @ (xc + l)) / np.linalg.norm(l))
+        return SupportFcn(n, lambda l: sup_ndsphere_callback(xc, rad, l)[0])
 
     @classmethod
     def forPolytope(self, poly):
@@ -168,6 +168,13 @@ def sup_hpoly_callback(poly, l):
             'message: {}'.format(res.message))
 
     return -res.fun, res.x
+
+def sup_ndsphere_callback(xc, r, l):
+    if np.linalg.norm(l) == 0:
+        return 0
+    else:
+        sv = xc + r * l / np.linalg.norm(l)
+        return l @ sv, sv
 
 class SupportVector():
     ''' Support Vector Class
@@ -307,3 +314,13 @@ class SupportVector():
 
             return SupportFcn(n, 
                 callback=lambda l: sup_hpoly_callback(poly, l))[1]
+
+    @classmethod
+    def forNdSphere(self, xc, rad):
+        xc = np.array(xc, dtype=float)
+        if len(xc.shape) > 1:
+            raise ValueError('Center point must be a vector')
+
+        n = xc.shape[0]
+
+        return SupportVector(n, lambda l: sup_ndsphere_callback(xc, rad, l)[1])

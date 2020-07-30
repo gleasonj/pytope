@@ -550,17 +550,19 @@ class Polytope:
         raise ValueError(f'Testing if a polytope in R^{self.n} contains points'
                          f'in R^{x.shape[0]} is not allowed: points must be '
                          f'columns (transpose the input?)')
-      # Check whether P.A @ x <= P.b (with a tolerance) for (all) x. Iff that
-      # is the case, the points x are all contained in P. To test this, check
-      # for which x P.A @ x - P.b <= 0, with a tolerance, and return whether it
-      # holds for all x.
-      Ax_m_b = self.A @ x - self.b
-      # Test whether every point satisfies every inequality. The following gives
-      # an (P.n, x.shape[1] bool array:
-      x_contained = np.logical_or(Ax_m_b < 0, np.isclose(Ax_m_b, 0))
-      # Return an array of which points that satisfy every inequality, and are
-      # thus contained in P:
-      return np.all(x_contained, axis=0)
+      
+      if self.in_H_rep:
+        # Check whether P.A @ x <= P.b (with a tolerance) for (all) x. Iff that
+        # is the case, the points x are all contained in P. To test this, check
+        # for which x P.A @ x - P.b <= 0, with a tolerance, and return whether it
+        # holds for all x.
+        Ax_m_b = self.A @ x - self.b
+        # Test whether every point satisfies every inequality. The following gives
+        # an (P.n, x.shape[1] bool array:
+        x_contained = np.logical_or(Ax_m_b < 0, np.isclose(Ax_m_b, 0))
+        # Return an array of which points that satisfy every inequality, and are
+        # thus contained in P:
+        return np.all(x_contained, axis=0)
 
 
   def is_empty(self):
