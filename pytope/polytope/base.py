@@ -8,6 +8,72 @@ from matplotlib.patches import Polygon
 import math
 import time
 
+class EmptyPolytope():
+    def __init__(self, n):
+        if not isinstance(n, int):
+            raise ValueError('Dimension of Polytope must be an integer.')
+        self._n = n
+
+    @property
+    def n(self):
+        return self._n
+
+    def __add__(self, y):
+        if isinstance(y, BasePolytope):
+            if y.n != self.n:
+                raise ValueError('Cannot add polytopes of different '
+                    'dimensions: {} != {}'.format(self.n, y.n))
+
+            return y
+
+        elif isinstance(y, np.ndarray):
+            if len(y.shape) > 1 or y.shape[0] != self.n:
+                raise ValueError('Cannot add polytope of dimension {} and '
+                    'numpy ndarray of shape {}. Can only add ')
+        else:
+            return NotImplemented
+
+    def __radd__(self, y):
+        self.__add__(y)
+
+class VertexPolytope():
+    def __init__(self, V, locked=False):
+        if not isinstance(V, np.ndarray) or len(V.shape) > 2:
+            raise ValueError('Vertices for VertexPolytope must be specified '
+                'as a 1 or 2-dimensional numpy ndarray.')
+
+        self._V = np.atleast_2d(V)
+
+    @property
+    def V(self):
+        return self.V
+
+    @property
+    def n(self):
+        return self.V.shape[1]
+
+    def __add__(self, y):
+        pass
+
+class HalfspacePolytope():
+    def __init__(H=None, A=None, b=None, locked=False):
+        pass
+
+    @property
+    def A(self):
+        pass
+
+    @property
+    def b(self):
+        pass
+
+    @property
+    def H(self):
+        pass
+
+class Polytope(HalfspacePolytope, VertexPolytope):
+    def __init__(Hpoly, Vpoly):
+        pass
 
 class Polytope:
 
