@@ -9,10 +9,11 @@ import math
 import time
 
 class EmptyPolytope():
-    def __init__(self, n):
+    def __init__(self, n, locked=False):
         if not isinstance(n, int):
             raise ValueError('Dimension of Polytope must be an integer.')
         self._n = n
+        self._locked = locked
 
     @property
     def n(self):
@@ -36,6 +37,9 @@ class EmptyPolytope():
     def __radd__(self, y):
         self.__add__(y)
 
+    def is_locked(self):
+        return self._locked
+
 class VertexPolytope():
     def __init__(self, V, locked=False):
         if not isinstance(V, np.ndarray) or len(V.shape) > 2:
@@ -43,6 +47,7 @@ class VertexPolytope():
                 'as a 1 or 2-dimensional numpy ndarray.')
 
         self._V = np.atleast_2d(V)
+        self._locked = locked
 
     @property
     def V(self):
@@ -55,25 +60,47 @@ class VertexPolytope():
     def __add__(self, y):
         pass
 
-class HalfspacePolytope():
-    def __init__(H=None, A=None, b=None, locked=False):
+    def contains(self, points):
         pass
+
+    def is_locked(self):
+        return self._locked
+
+class HalfspacePolytope():
+    def __init__(A=None, b=None, H=None, locked=False):
+        self._locked = locked
+
+        # TODO: Implement more checks of appropriate sizing and things of inputs
+        if not A is None and not B is None and not H is None:
+            raise ValueError('Overdefined polytope. Cannot define halfspace '
+                'polytope with A, b, and H. I am too lazy to ensure that H is '
+                'an appropriate copy of A and b. Just choose one.')
+        
+        if not A is None and not B is None:
+            self._A = A
+            self._b = b
+        else:
+            if A is None and B is None and not H is None:
+                self._A = H[:, :-1]
+                self._b = H[:, -1]
+            else:
+              raise ValueError('Underdefined polytope: Cannot define '
+                  'HalfspacePolytope without either (A, b) or H.')
 
     @property
     def A(self):
-        pass
+        return self._A
 
     @property
     def b(self):
-        pass
+        return self._b
 
     @property
     def H(self):
-        pass
+        return np.hstack((self.A, np.reshape(self.b, (self.A.shape[0], 1))))
 
-class Polytope(HalfspacePolytope, VertexPolytope):
-    def __init__(Hpoly, Vpoly):
-        pass
+    def is_locked(self):
+        return self._locked
 
 class Polytope:
 

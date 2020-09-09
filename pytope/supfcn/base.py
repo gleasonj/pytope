@@ -83,26 +83,32 @@ class SupportFcn():
         if self.is_empty:
             return SupportFcn(self.n)
 
-        if isinstance(A, np.ndarray) or isinstance(A, float):
-            if isinstance(A, float):
-                return SupportFcn(self.n, callback=lambda l: self(A * l))
-            else:
-                if len(A.shape) != 2:
-                    if len(A.shape) == 1 and A.shape[0] == 1:
-                        # Passed a scalar in the form of a numpy array
-                        return A[0] * self
-                    else:
-                        raise ValueError('Can only perform multiplication by '
-                            'a scalar or a matrix')
-                    
-                else:
-                    if self.n != A.shape[1]:
-                        raise ValueError('Dimension mismatch between matrix '
-                            'multiplier and dimension of the support function '
-                            'space')
+        if isinstance(A, float):
+            return SupportFcn(self.n, callback=lambda l: self(A * l))
+        else:
+            return NotImplemented
 
-                    return SupportFcn(A.shape[0], 
-                        callback=lambda l: self(A.T @ l))
+    def __rmatmul__(self, A):
+        if self.is_empty:
+            return SupportFcn(self.n)
+
+        if isinstance(A, np.ndarray):
+            if len(A.shape) != 2:
+                if len(A.shape) == 1 and A.shape[0] == 1:
+                    # Passed a scalar in the form of a numpy array
+                    return A[0] * self
+                else:
+                    raise ValueError('Can only perform multiplication by '
+                        'a scalar or a matrix')
+                
+            else:
+                if self.n != A.shape[1]:
+                    raise ValueError('Dimension mismatch between matrix '
+                        'multiplier and dimension of the support function '
+                        'space')
+
+                return SupportFcn(A.shape[0], 
+                    callback=lambda l: self(A.T @ l))
         else:
             return NotImplemented
 
@@ -153,7 +159,7 @@ class SupportFcn():
                 n = poly.A.shape[0]
 
             return SupportFcn(n, 
-                callback=lambda l: sup_hpoly_callback(poly, l))[0]
+                callback=lambda l: sup_hpoly_callback(poly, l)[0])
 
 def sup_vpoly_callback(poly, l):
     y = poly.V @ l
@@ -251,28 +257,30 @@ class SupportVector():
 
     def __rmul__(self, A):
         if self.is_empty:
-            return SupportFcn(self.n)
+            return SupportVector(self.n)
 
-        if isinstance(A, np.ndarray) or isinstance(A, float):
-            if isinstance(A, float):
-                return SupportVector(self.n, callback=lambda l: A * self(A * l))
+        if isinstance(A, float):
+            return SupportVector(self.n, callback=lambda l: A * self(A * l))
+        else:
+            return NotImplemented
+        
+    def __rmatmul__(self, A):
+        if self.is_empty:
+            return SupportVector(self.n)
+
+        if isinstance(A, np.ndarray):
+            if len(A.shape) != 2:
+                raise ValueError('Can only perform multiplication by '
+                    'a scalar or a matrix')
+                
             else:
-                if len(A.shape) != 2:
-                    if len(A.shape) == 1 and A.shape[0] == 1:
-                        # Passed a scalar in the form of a numpy array
-                        return A[0] * self
-                    else:
-                        raise ValueError('Can only perform multiplication by '
-                            'a scalar or a matrix')
-                    
-                else:
-                    if self.n != A.shape[1]:
-                        raise ValueError('Dimension mismatch between matrix '
-                            'multiplier and dimension of the support vector '
-                            'space')
+                if self.n != A.shape[1]:
+                    raise ValueError('Dimension mismatch between matrix '
+                        'multiplier and dimension of the support vector '
+                        'space')
 
-                    return SupportVector(A.shape[0], 
-                        callback=lambda l: A @ self(A.T @ l))
+                return SupportVector(A.shape[0], 
+                    callback=lambda l: A @ self(A.T @ l))
         else:
             return NotImplemented
 
@@ -305,15 +313,15 @@ class SupportVector():
             else:
                 n = poly.V.shape[0]
 
-            return SupportFcn(n, callback=lambda l: sup_vpoly_callback(poly, l)[1])
+            return SupportVector(n, callback=lambda l: sup_vpoly_callback(poly, l)[1])
         else:
             if len(poly.A.shape) > 1:
                 n = poly.A.shape[1]
             else:
                 n = poly.A.shape[0]
 
-            return SupportFcn(n, 
-                callback=lambda l: sup_hpoly_callback(poly, l))[1]
+            return SupportVector(n, 
+                callback=lambda l: sup_hpoly_callback(poly, l)[1])
 
     @classmethod
     def forNdSphere(self, xc, rad):

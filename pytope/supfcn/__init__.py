@@ -1,1 +1,1 @@
-from .base import SupportFcn
+from .base import SupportFcn, SupportVector
