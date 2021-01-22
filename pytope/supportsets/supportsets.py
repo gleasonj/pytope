@@ -4,6 +4,8 @@ from ..polytope import Polytope
 from .lazypolytopes import LazyVertexSet, LazyFacetSet
 
 class SupportSet():
+    __array_ufunc__ = None
+
     def __add__(self, B):
         if isinstance(B, SupportSet):
             if B.dim != self.dim:
@@ -21,6 +23,13 @@ class SupportSet():
         else:
             return NotImplemented
 
+    def __rmatmul__(self, M: np.ndarray):
+        assert len(M.shape) == 2 and M.shape[0] == M.shape[1], \
+            'Can only perform matrix multiplication of support sets with a ' \
+            'squarte matrix.'
+
+        return MatMulSupportSet(self, M)
+
     def __call__(self, l: np.ndarray):
     ''' Base method to obtain the support vector for the support set. This 
     method is typically not called and it is preferred for users to use the
@@ -31,7 +40,7 @@ class SupportSet():
     with robust input checks because it is assumed that users have used the
     supvec function, which has the appropriate input handling.
     '''
-        raise NotImplementedError
+        raise NotImplementedError()
 
 def SingletonSupportSet(SupportSet):
     def __init__(self, x: np.ndarray):
@@ -69,7 +78,30 @@ def MinkowskiAdditionSupportSet(SupportSet):
     def __call__(self, l: np.ndarray):
         return self.A(l) + self.B(l)
 
-def MatMulSupportSet
+class MatMulSupportSet(SupportSet):
+''' Support set for matrix multiplication
+
+This defines a new support set that provides an appropriate call function for
+a matrix multiplication with a support set, i.e.
+
+    S' = M @ S
+
+The multiplying matrix, M, must be square.
+
+INPUTS:
+    S   Support Set
+    M   Multiplying matrix
+'''
+    def __init__(self, S: SupportSet, M: np.ndarray):
+        if len(M.shape) != 2 or M.shape[0] != M.shape[1]:
+            raise ValueError('Can only perform matix multiplication of a 
+                'support set with a square matrix.')
+
+        self._S = S
+        self._M = M
+
+    def __call__(self, l: np.ndarray):
+        return M @ self._S(M.T @ l)
 
 class Ballp(SupportSet):
 ''' A Euclidean p-norm Ball Set
