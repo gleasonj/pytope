@@ -14,17 +14,130 @@ class EmptyPolytope():
             raise ValueError('Dimension of Polytope must be an integer.')
         self._n = n
         self._locked = locked
+class Polytope():
+    def __init__(self, A=None, b=None, V=None, locked=False):
+        if A is None != b is None:
+            raise RuntimeError('Underdefined Polytope: Only one of the pair '
+                '(A, b) was defined. Need to define both or neither.')
+
+        self._A = A
+        self._b = b
+        if not (A is None or b is None):
+            if not isinstance(A, np.ndarray) or len(A.shape) != 2:
+                raise ValueError('The polytope inequality matrix, A, must be '
+                    'a 2-dimensional numpy ndarray')
+                    
+            if not isinstance(b, np.ndarray) or len(b.shape) != 1:
+                raise ValueError('The polytope inequality vector, b, must be '
+                    'a numpy ndarray')
+
+            if self.A.shape[0] != self.b.shape[0]:
+                raise ValueError('Size mismatch in the number of rows of A '
+                  'and b')
+            
+            self._A = A
+            self._b = b
+
+        self._V = V
+        if not V is None:
+            if not isinstance(V, np.ndarray) or len(V.shape) > 2:
+                raise ValueError('If the vertices of the polytope, V, are '
+                    'specified, it must be a numpy ndarray or at most '
+                    '2-dimensions, i.e. len(V.shape) <= 2.')
+
+            self._V = np.atleast_2d(V)
 
     @property
-    def n(self):
-        return self._n
+    def A(self):
+        return self._A
 
+    @property
+    def b(self):
+        return self._b
+
+    @property
+    def H(self):
+        if self.has_H_rep():
+            return np.hstack((self.A, np.reshape(self.b, (self.d, 1))))
+        else:
+            return None
+
+    @property 
+    def d(self):
+        if self.has_H_rep():
+            self.A.shape[1]
+        elif self.has_V_rep():
+            self.V.shape[1]
+        else:
+            return None
+    
+    @property
+    def V(self):
+        return self._V
+
+    def has_V_rep(self):
+        return not self.V is None
+
+    def has_H_rep(self):
+        return not (self.A is None or self.b is None)
+
+    def is_empty(self):
+        if self.has_V_rep():
+            return False
+        elif not self.has_H_rep():
+            # Combined with previous condition does not have H or V rep
+            return True
+        else:
+            # Has H rep but not V rep
+            # Easiest wat to determine if is the polytope is empty is to just
+            # check if the support in any direction
+            eta = np.zeros(self.d, dtype=float)
+            eta[0] = 1.0
+            s = self.support(eta)
+            if s is None:
+                return True
+            else:
+                return False
+
+    def support(self, eta):
+        ''' Compute the support function
+        '''
+        if self.has_V_rep():
+            if len(eta.shape) == 2:
+                s = np.zeros(eta.shape[0])
+                for i, v in enumerate(eta):
+                    s[i] = self.support(v)
+            else:
+                s = np.max(self.V @ eta)
+
+        elif self.has_H_rep():
+            if len(eta.shape) == 2:
+                s = np.zeros(eta.shape[0])
+                for i, v in enumerate(eta):
+                    sv = self.support(v)
+                      
+                    s[i] = sv
+
+                    if sv is None:
+                        s = None
+                        break
+            else:
+                res = linprog(-eta, A_ub=self.A, b_ub=self.b, 
+                    bounds=(-np.inf, np.inf))
+
+                s = -res.fun if res.success else None
+        
+        else:
+            s = None
+
+        return s
+
+    def contains(self, V):
+        if self.has_H_rep():
+
+class EmptyPolytope():
     def __add__(self, y):
-        if isinstance(y, BasePolytope):
-            if y.n != self.n:
-                raise ValueError('Cannot add polytopes of different '
-                    'dimensions: {} != {}'.format(self.n, y.n))
-
+        if isinstance(y, Polytope):
             return y
 
         elif isinstance(y, np.ndarray):
@@ -39,6 +152,17 @@ class EmptyPolytope():
 
     def is_locked(self):
         return self._locked
+    def __rsub__(self, y):
+        if isinstance(y, Polytope):
+            return y
+        else:
+            return NotImplemented
+
+    def __sub__(self, y):
+        if isinstance(y, Polytope):
+            return self
+        else:
+            return NotImplemented
 
 class VertexPolytope():
     def __init__(self, V, locked=False):
@@ -62,6 +186,11 @@ class VertexPolytope():
 
     def contains(self, points):
         pass
+class HalfspacePolytope():
+    def __init__(A=None, b=None, locked=False):
+        if A is None and b is None:
+            raise RuntimeError('Defined and empty polytope. For accuracy and '
+                'clarity, please use EmptyPolytope class.')
 
     def is_locked(self):
         return self._locked
