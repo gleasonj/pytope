@@ -19,7 +19,7 @@ class SupportSet():
 
             return MinkowskiAdditionSupportSet(self, SingletonSupportSet(B))
         elif isinstance(B, LazyVertexSet):
-            return MinkowskiAdditionSupportSet(self, LazyVertexSuportSet(B))
+            return MinkowskiAdditionSupportSet(self, LazyVertexSupportSet(B))
         else:
             return NotImplemented
 
@@ -30,19 +30,23 @@ class SupportSet():
 
         return MatMulSupportSet(self, M)
 
-    def __call__(self, l: np.ndarray):
-    ''' Base method to obtain the support vector for the support set. This 
-    method is typically not called and it is preferred for users to use the
-    supvec function.
+    @property
+    def dim(self):
+        raise NotImplementedError
 
-    The calling function assumes that the provided input is a 1-d numpy array
-    with a magnitude (2-norm) of 1. The call functions are not typically written
-    with robust input checks because it is assumed that users have used the
-    supvec function, which has the appropriate input handling.
-    '''
+    def __call__(self, l: np.ndarray):
+        ''' Base method to obtain the support vector for the support set. This 
+        method is typically not called and it is preferred for users to use the
+        supvec function.
+
+        The calling function assumes that the provided input is a 1-d numpy array
+        with a magnitude (2-norm) of 1. The call functions are not typically written
+        with robust input checks because it is assumed that users have used the
+        supvec function, which has the appropriate input handling.
+        '''
         raise NotImplementedError()
 
-def SingletonSupportSet(SupportSet):
+class SingletonSupportSet(SupportSet):
     def __init__(self, x: np.ndarray):
         self._x = x
 
@@ -53,14 +57,14 @@ def SingletonSupportSet(SupportSet):
     def __call__(self, l: np.ndarray):
         return self.x
 
-def LazyVertexSupportSet(SupportSet):
+class LazyVertexSupportSet(SupportSet):
     def __init__(self, S: LazyVertexSet):
         self._S = S
 
     def __call__(self, l: np.ndarray):
         self._S[np.argmax(l @ self._S)]
 
-def MinkowskiAdditionSupportSet(SupportSet):
+class MinkowskiAdditionSupportSet(SupportSet):
     def __init__(self, A: (SupportSet, LazyVertexSet, Polytope), 
         B: (SupportSet, LazyVertexSet, Polytope)):
     
@@ -79,42 +83,42 @@ def MinkowskiAdditionSupportSet(SupportSet):
         return self.A(l) + self.B(l)
 
 class MatMulSupportSet(SupportSet):
-''' Support set for matrix multiplication
+    ''' Support set for matrix multiplication
 
-This defines a new support set that provides an appropriate call function for
-a matrix multiplication with a support set, i.e.
+    This defines a new support set that provides an appropriate call function for
+    a matrix multiplication with a support set, i.e.
 
-    S' = M @ S
+        S' = M @ S
 
-The multiplying matrix, M, must be square.
+    The multiplying matrix, M, must be square.
 
-INPUTS:
-    S   Support Set
-    M   Multiplying matrix
-'''
+    INPUTS:
+        S   Support Set
+        M   Multiplying matrix
+    '''
     def __init__(self, S: SupportSet, M: np.ndarray):
         if len(M.shape) != 2 or M.shape[0] != M.shape[1]:
-            raise ValueError('Can only perform matix multiplication of a 
+            raise ValueError('Can only perform matix multiplication of a '
                 'support set with a square matrix.')
 
         self._S = S
         self._M = M
 
     def __call__(self, l: np.ndarray):
-        return M @ self._S(M.T @ l)
+        return self._M @ self._S(self._M.T @ l)
 
 class Ballp(SupportSet):
-''' A Euclidean p-norm Ball Set
+    ''' A Euclidean p-norm Ball Set
 
-The Euclidean p-norm Ball set is defined as
+    The Euclidean p-norm Ball set is defined as
 
-    { x \in R^n | ||(x - c)||_p <= r }
+        { x \in R^n | ||(x - c)||_p <= r }
 
-INPUTS:
-    p   Norm value
-    center  Center point
-    radius  Radius value
-'''
+    INPUTS:
+        p   Norm value
+        center  Center point
+        radius  Radius value
+    '''
     def __init__(self, p: int, center: np.ndarray, radius: float):
         assert len(center.shape) == 1, 'Center must be an array'
         self._p = p
@@ -123,21 +127,25 @@ INPUTS:
 
     @property
     def center(self):
-    ''' Center point of the Ballp set '''
+        ''' Center point of the Ballp set '''
         return self.center
 
     @property
     def radius(self):
-    ''' Radius of the Ballp set '''
+        ''' Radius of the Ballp set '''
         return self._radius
 
     @property
+    def p(self):
+        return self._p
+
+    @property
     def dim(self):
-    ''' Dimension of the Ballp set '''
+        ''' Dimension of the Ballp set '''
         return len(self._center)
 
     def contains(self, x: np.ndarray):
-    ''' Check is a point or collection of points is contained in the set. '''
+        ''' Check is a point or collection of points is contained in the set. '''
         assert len(x.shape) < 3, \
             'Point(s) must be an array or list of arrays (1 or 2-d numpy ' \
             'arrays)'
@@ -151,51 +159,51 @@ INPUTS:
                 return False
 
 class Ball2(Ballp):
-''' A Euclidean Ball set with p=2 '''
+    ''' A Euclidean Ball set with p=2 '''
     def __init__(self, center: np.ndarray, radius: float):
         super().__init__(2, center, radius)
 
     def __call__(self, l: np.ndarray):
-    ''' Return the support vector for a 1-d numpy array of unit magnitude. '''
+        ''' Return the support vector for a 1-d numpy array of unit magnitude. '''
         return self.center + self.radius * l    
 
 
 def supvec(S, l: np.ndarray):
-''' Obtain the support vector(s) for given set and direction(s).
+    ''' Obtain the support vector(s) for given set and direction(s).
 
-While the various implementations of support sets have a call function, this is
-the primary function that users should use to obtain support vectors as it 
-properly handles different inputs, e.g. multiple direction vectors or
-direction vectors that do not have unit magnitude.
+    While the various implementations of support sets have a call function, this is
+    the primary function that users should use to obtain support vectors as it 
+    properly handles different inputs, e.g. multiple direction vectors or
+    direction vectors that do not have unit magnitude.
 
-The support vector is defined as:
+    The support vector is defined as:
 
-        argmax  l^T @ x
-        w.r.t.  x 
-    subject to  x \in S
+            argmax  l^T @ x
+            w.r.t.  x 
+        subject to  x \in S
 
-NOTE: While l and x are mathematically defined as vectors in n-dimensional 
-      Euclidean space, because of how arrays are typically created in numpy,
-      a vector is a 1-d numpy array and a collection of vectors is given
-      by a 2-d numpy array where each row is a vector. Values are returned 
-      by the same convention.
+    NOTE: While l and x are mathematically defined as vectors in n-dimensional 
+        Euclidean space, because of how arrays are typically created in numpy,
+        a vector is a 1-d numpy array and a collection of vectors is given
+        by a 2-d numpy array where each row is a vector. Values are returned 
+        by the same convention.
 
-INPUTS:
-    S   The given set for which to determine the support vector. The set must
-        be amenable to determination of support vectors. Currently supported
-        types are:
-            SupportSet (with an appropriately defined call function)
-            Polytope
-            LazyVertexSet
-            LazyFacetSet
+    INPUTS:
+        S   The given set for which to determine the support vector. The set must
+            be amenable to determination of support vectors. Currently supported
+            types are:
+                SupportSet (with an appropriately defined call function)
+                Polytope
+                LazyVertexSet
+                LazyFacetSet
 
-    l   A 1-d numpy array of the given direction or 2-d numpy array for which
-        each row represents a direction.
+        l   A 1-d numpy array of the given direction or 2-d numpy array for which
+            each row represents a direction.
 
-OUTPUTS:
-    v   A 1-d numpy array of the support vector or 2-d numpy array for which
-        each row represents a support vector.
-'''
+    OUTPUTS:
+        v   A 1-d numpy array of the support vector or 2-d numpy array for which
+            each row represents a support vector.
+    '''
     assert len(l.shape) < 3, 'Direction(s) must be a 1-d numpy array or a ' \
         '2-d numpy array where each row is a direction vector.'
 
@@ -220,29 +228,29 @@ OUTPUTS:
         raise NotImplementedError('Set type {} not supported.'.format(type(S)))
 
 def supfcn(S, l: np.ndarray):
-''' Obtain the support function value(s) for given set and direction(s).
+    ''' Obtain the support function value(s) for given set and direction(s).
 
-A support function is defined as:
+    A support function is defined as:
 
-        max  l^T @ x
-        w.r.t.  x 
-    subject to  x \in S
+            max  l^T @ x
+            w.r.t.  x 
+        subject to  x \in S
 
-Computing the support function is equivalent to calling l @ supvec(S, l).T.
+    Computing the support function is equivalent to calling l @ supvec(S, l).T.
 
-INPUTS:
-    S   The given set for which to determine the support vector. The set must
-        be amenable to determination of support vectors. Currently supported
-        types are:
-            SupportSet (with an appropriately defined call function)
-            Polytope
-            LazyVertexSet
-            LazyFacetSet
+    INPUTS:
+        S   The given set for which to determine the support vector. The set must
+            be amenable to determination of support vectors. Currently supported
+            types are:
+                SupportSet (with an appropriately defined call function)
+                Polytope
+                LazyVertexSet
+                LazyFacetSet
 
-    l   A 1-d numpy array of the given direction or 2-d numpy array for which
-        each row represents a direction.
+        l   A 1-d numpy array of the given direction or 2-d numpy array for which
+            each row represents a direction.
 
-OUTPUTS:
-    v   A float or 1-d array of support function values.
-'''
+    OUTPUTS:
+        v   A float or 1-d array of support function values.
+    '''
     return l @ supvec(S, l).T
